@@ -1,0 +1,451 @@
+Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Variable.Global.sFile.Declare(String)
+Variable.Global.sLog.Declare(String)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Coded by: SMC
+'Project Start Date: 5/14/2011
+'Hooks:
+'  Task Scheduler item
+'Notes:
+'  Quote 2029 for Loadmaster
+'
+'  A GAB script will run off the task scheduler and search through a specific folder (M:\To Be Processed NDE Reports) where paperwork is scanned in PDF form. The format of this folder will be as follows:
+'  M:\To Be Processed NDE Reports\JOB-SUFFIX\REPORTNO.PDF, where REPORTNO is the Report No. ID.
+'
+'  A GAB script will go through each JOB folder, move each PDF to M:\Processed NDE Reports\JOB-SUFFIX\ and attach it to the Job as a link.  The Doc Control Group will be NDEQC (Link ID to be given).  If the PDF
+'  is a duplicate, GAB will add an incrementing number to the end of the PDF filename.
+'
+'Revision 9/2/11 for quote 2816:  Reports will now be found in M:\To Be Processed NDE Reports\REPORTNO.PDF and the Job-Suffix will be found in ATG_WO_SIGN_LOG.sql (Changed Get_Items and calls Loop_Pdfs straight from Main)
+
+F.ODBC.Connection!conx.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+V.Local.sText.Declare(String)
+
+'F.Intrinsic.Debug.InvokeDebugger
+F.Intrinsic.Debug.Stop
+F.Intrinsic.Control.CallSub(Dl,"sText","Program Start: Processing Report docs to attach to WO")
+'F.Intrinsic.Control.CallSub(Loop_dirs,"iCurrLevel",0,"sDir","M:\To Be Processed NDE Reports\")
+F.Intrinsic.Control.CallSub(Loop_pdfs,"sDir","M:\To Be Processed NDE Reports\")
+F.Intrinsic.String.Concat("Program End",V.Ambient.NewLine,V.Ambient.NewLine,V.Local.sText)
+F.Intrinsic.Control.CallSub(Dl,"sText",V.Local.sText)
+F.Intrinsic.Control.CallSub(Unload)
+
+
+Program.Sub.Main.End
+
+Program.Sub.Get_Dirs.Start
+F.Intrinsic.Debug.SetLA("Get_Dirs: Returns all folders (iType=0) or files (iType=1) as FQPs from a passed file directory")
+V.Local.sError.Declare(String)
+
+Function.Intrinsic.Control.SetErrorHandler("Get_Dirs_Err")
+Function.Intrinsic.Control.ClearErrors
+
+V.Local.sDir.Declare(String)
+V.Local.sDirs.Declare(String)
+V.Local.sRet.Declare(String)
+V.Local.sTemp.Declare(String)
+V.Local.bRet.Declare(Boolean)
+V.Local.bPDF.Declare(Boolean)
+V.Local.iC.Declare(Long)
+
+V.Local.sDir.Set(V.Args.sDir)
+F.Intrinsic.File.DirExists(V.Local.sDir,V.Local.bRet)
+
+F.Intrinsic.Control.If(V.Local.bRet,=,True)
+	F.Intrinsic.Control.If(V.Args.iType,=,0)
+		F.Intrinsic.File.GetFileList(V.Local.sDir,16,V.Local.sDirs)
+	F.Intrinsic.Control.Else
+		F.Intrinsic.File.GetFileList(V.Local.sDir,4,V.Local.sDirs)
+	F.Intrinsic.Control.EndIf
+
+	F.Intrinsic.String.Split(V.Local.sDirs,":",V.Local.sDirs)
+	F.Intrinsic.Control.If(V.Local.sDirs.UBound,>=,0)
+		F.Intrinsic.Control.For(V.Local.iC,0,V.Local.sDirs.UBound,1)
+			F.Intrinsic.Control.If(V.Local.sDirs(v.Local.iC),<>,"")
+				F.Intrinsic.Control.If(V.Local.sDirs(v.Local.iC),<>,".")
+					F.Intrinsic.Control.If(V.Local.sDirs(v.Local.iC),<>,"..")
+						F.Intrinsic.Control.If(V.Args.iType,=,0)
+							'Adds Fully Qualified Paths for Dirs
+							F.Intrinsic.Control.If(V.Local.sRet,=,"")
+								F.Intrinsic.String.Concat(V.Local.sDir,V.Local.sDirs(v.Local.iC),"\",V.Local.sRet)
+							F.Intrinsic.Control.Else
+								F.Intrinsic.String.Concat(V.Local.sRet,";",V.Local.sDir,V.Local.sDirs(v.Local.iC),"\",V.Local.sRet)
+							F.Intrinsic.Control.EndIf
+						F.Intrinsic.Control.Else
+							'Adds FQPs for PDFs
+							F.Intrinsic.Control.If(V.Local.sRet,=,"")
+								F.Intrinsic.String.Concat(V.Local.sDir,V.Local.sDirs(v.Local.iC),V.Local.sRet)
+							F.Intrinsic.Control.Else
+								F.Intrinsic.String.Concat(V.Local.sRet,";",V.Local.sDir,V.Local.sDirs(v.Local.iC),V.Local.sRet)
+							F.Intrinsic.Control.EndIf
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Next(V.Local.iC)
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Variable.AddRV("sDirs",V.Local.sRet)
+
+Function.Intrinsic.Control.ExitSub
+Function.Intrinsic.Control.Label("Get_Dirs_Err")
+Function.Intrinsic.Control.If(Variable.Ambient.ErrorNumber,"<>",0)
+	Function.Intrinsic.String.Concat("Error Occurred ",Variable.Ambient.ErrorNumber," with description ",Variable.Ambient.ErrorDescription,V.ambient.NewLine,"Last Action: ",V.ambient.LastAction,Variable.Local.sError)
+	F.Intrinsic.Control.CallSub(Dl,"sText",V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+
+
+
+
+Program.Sub.Get_Dirs.End
+
+Program.Sub.Loop_Dirs.Start
+F.Intrinsic.Debug.SetLA("Loop_Dirs: Loops through M:\To Be Processed NDE Reports\Job-Suffix\ReportNo.ext dirs 1 levels deep (starting at M:\To Be Processed NDE Reports) to get to files in the Job-Suffix folders.")
+V.Local.sDir.Declare(String)
+V.Local.sSubDirs.Declare(String)
+V.Local.iC.Declare(Long)
+V.Local.iLevel.Declare(Long)
+
+'iCurrLevel is not necessary for this project, but was used in ATG_Task_Sched_Links.gas
+F.Intrinsic.Math.Add(V.Args.iCurrLevel,1,V.Local.iLevel)
+F.Intrinsic.Control.CallSub(Get_dirs,"sDir",V.args.sDir,"iType",0)
+F.Intrinsic.Control.If(V.args.sDirs,<>,"")
+	F.Intrinsic.String.Split(V.Args.sDirs,";",V.Local.sSubDirs)
+	
+	F.Intrinsic.Control.For(V.Local.iC,0,V.Local.sSubDirs.UBound,1)
+'		F.Intrinsic.Control.If(V.Local.iLevel,<,1)
+'			F.Intrinsic.Control.CallSub(Loop_dirs,"iCurrLevel",V.Local.iLevel,"sDir",V.Local.sSubDirs(v.Local.iC))
+'		F.Intrinsic.Control.Else
+			F.Intrinsic.Control.CallSub(Loop_pdfs,"sDir",V.Local.sSubDirs(v.Local.iC))
+'		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Next(V.Local.iC)
+F.Intrinsic.Control.EndIf
+
+
+
+Program.Sub.Loop_Dirs.End
+
+Program.Sub.Loop_PDFs.Start
+F.Intrinsic.Debug.SetLA("Loop_PDFs:  Gets all files in part folder (Get_Dirs), then processes each (Process_pdf)")
+V.Local.sDir.Declare(String)
+V.Local.sPDFs.Declare(String)
+V.Local.iC.Declare(Long)
+
+F.Intrinsic.Control.CallSub(Get_dirs,"sDir",V.args.sDir,"iType",1)
+F.Intrinsic.Control.If(V.args.sDirs,<>,"")
+	F.Intrinsic.String.Split(V.Args.sDirs,";",V.Local.sPDFs)
+	F.Intrinsic.Control.For(V.Local.iC,0,V.Local.sPDFs.UBound,1)
+		F.Intrinsic.Control.CallSub(Process_pdf,"sPath",V.Local.sPDFs(v.Local.iC))
+	F.Intrinsic.Control.Next(V.Local.iC)
+F.Intrinsic.Control.EndIf
+
+
+
+
+Program.Sub.Loop_PDFs.End
+
+Program.Sub.Process_PDF.Start
+F.Intrinsic.Debug.SetLA("Process_PDF:  From a passed FQ filename, extracts Item info (Get_Items), copies item from M:\To Be Processed to M:\Processed (Move_Item), attaches doc to WO, then deletes from M:\To Be Processed")
+
+V.Local.sPath.Declare(String)
+V.Local.sKey.Declare(String)
+V.Local.iLinkID.Declare(Long)
+V.Local.sTargPath.Declare(String)
+V.Local.sSourcePath.Declare(String)
+V.Local.iDocID.Declare(Long)
+V.Local.sQuery.Declare(String)
+V.Local.sSuffix.Declare(String)
+V.Local.sJob.Declare(String)
+V.Local.sReportNo.Declare(String)
+
+F.Intrinsic.Debug.SetLA("Gets Item info and exits sub if not complete")
+V.Local.sPath.Set(V.Args.sPath)
+F.Intrinsic.Control.CallSub(Get_items,"sPath",V.local.sPath)
+V.Local.sJob.Set(V.Args.sJob)
+V.Local.sSuffix.Set(V.Args.sSuffix)
+V.Local.sReportNo.Set(V.Args.sReportNo)
+
+F.Intrinsic.Control.If(V.Local.sJob,<>,"")
+	F.Intrinsic.Debug.SetLA("Copies Item from M:\To Be Processed to M:\Processed, then returns target and source path")
+	F.Intrinsic.Control.CallSub(Move_item,"sPath",V.Local.sPath)
+	V.Local.sTargPath.Set(V.Args.sTargPath)
+	V.Local.sSourcePath.Set(V.Args.sSourcePath)
+
+	F.Intrinsic.Debug.SetLA("Attaches Report ",V.Local.sReportNo," to Job ",V.Local.sJob,"-",V.Local.sSuffix)
+	F.Intrinsic.String.RPad(V.Local.sJob," ",6,V.Local.sKey)
+	F.Intrinsic.String.Concat(V.Local.sKey,V.Local.sSuffix,V.Local.sKey)
+	F.Intrinsic.String.RTrim(V.Local.sKey,V.Local.sKey)
+	F.Global.DocumentControl.CreateReference(V.Local.sKey,20,V.Local.iLinkID)
+	F.Global.DocumentControl.AddDocument(V.Local.iLinkID,V.Local.sTargPath,"",-1,"")
+	F.Intrinsic.String.Concat("Attached ",V.Local.sTargPath," to WO Link ID: ",V.Local.iLinkID,", Key: ",V.Local.sKey,V.Local.sQuery)
+	F.Intrinsic.Control.CallSub(Dl,"sText",V.Local.sQuery)
+
+	F.Intrinsic.File.DeleteFile(V.Local.sSourcePath)
+F.Intrinsic.Control.EndIf
+
+Program.Sub.Process_PDF.End
+
+Program.Sub.Get_Items.Start
+F.Intrinsic.Debug.SetLA("Get_Items: Separates passed FQ filename out into Item elements")
+V.Local.sPath.Declare(String)
+V.Local.iPos.Declare(Long)
+V.Local.iRight.Declare(Long)
+V.Local.sSuffix.Declare(String)
+V.Local.sJob.Declare(String)
+V.Local.sReportNo.Declare(String)
+V.Local.sQuery.Declare(String)
+
+F.Intrinsic.Control.CallSub(Append_last_item,"sPath",V.args.sPath)
+V.Local.sReportNo.Set(V.Args.sItem)
+'F.Intrinsic.Control.CallSub(Append_last_item,"sPath",V.args.sPath)
+'V.Local.sJob.Set(V.Args.sItem)
+'
+'F.Intrinsic.String.Instr(V.Local.sJob,"-",V.Local.iPos)
+'F.Intrinsic.Control.If(V.Local.iPos,<>,0)
+'	F.Intrinsic.Math.Sub(V.Local.sJob.Length,V.Local.iPos,V.Local.iRight)
+'	F.Intrinsic.String.Right(V.Local.sJob,V.Local.iRight,V.Local.sSuffix)
+'	F.Intrinsic.Math.Sub(V.Local.iPos,1,V.Local.iPos)
+'	F.Intrinsic.String.Left(V.Local.sJob,V.Local.iPos,V.Local.sJob)
+'F.Intrinsic.Control.Else
+'	V.Local.sSuffix.Set("")
+'F.Intrinsic.Control.EndIf
+
+F.Intrinsic.String.InstrRev(V.Local.sReportNo,".",V.Local.iPos)
+F.Intrinsic.Math.Sub(V.Local.iPos,1,V.Local.iPos)
+F.Intrinsic.String.Left(V.Local.sReportNo,V.Local.iPos,V.Local.sReportNo)
+
+F.Intrinsic.String.Concat("SELECT * FROM ATG_WO_SIGN_LOG WHERE REPORTNO='",V.Local.sReportNo,"'",V.Local.sQuery)
+F.Intrinsic.Debug.SetLA("Looking for job: ",V.Local.sQuery)
+F.ODBC.Connection!conx.OpenRecordsetRO("rstReport",V.Local.sQuery)
+F.Intrinsic.Control.If(V.ODBC.conx!rstReport.EOF,<>,True)
+	V.Local.sJob.Set(V.ODBC.conx!rstReport.FieldVal!JOB)
+	V.Local.sSuffix.Set(V.ODBC.conx!rstReport.FieldVal!SUFFIX)
+F.Intrinsic.Control.Else
+	F.Intrinsic.Debug.SetLA("Unable to find job-suffix record in ATG_WO_SIGN_LOG for Report No ",V.Local.sReportNo)
+	F.Intrinsic.Control.CallSub(Dl,"sText",V.Ambient.LastAction)
+F.Intrinsic.Control.EndIf
+F.ODBC.conx!rstReport.Close
+
+F.Intrinsic.Variable.AddRV("sJob",V.Local.sJob)
+F.Intrinsic.Variable.AddRV("sSuffix",V.Local.sSuffix)
+F.Intrinsic.Variable.AddRV("sReportNo",V.Local.sReportNo)
+
+
+Program.Sub.Get_Items.End
+
+Program.Sub.Append_Last_Item.Start
+F.Intrinsic.Debug.SetLA("Append_Last_Item: Appends the last item off a file path and returns the item and the remaining path as strings")
+V.Local.sError.Declare(String)
+
+Function.Intrinsic.Control.SetErrorHandler("Append_Last_Item_Err")
+Function.Intrinsic.Control.ClearErrors
+
+V.Local.sPath.Declare(String)
+V.Local.iPos.Declare(Long)
+V.Local.iRight.Declare(Long)
+V.Local.sItem.Declare(String)
+
+V.Local.sPath.Set(V.Args.sPath)
+F.Intrinsic.String.InstrRev(V.Local.sPath,"\",V.Local.iPos)
+F.Intrinsic.Math.Sub(V.Local.sPath.Length,V.Local.iPos,V.Local.iRight)
+F.Intrinsic.String.Right(V.Local.sPath,V.Local.iRight,V.Local.sItem)
+F.Intrinsic.Math.Sub(V.Local.iPos,1,V.Local.iPos)
+F.Intrinsic.String.Left(V.Local.sPath,V.Local.iPos,V.Local.sPath)
+
+F.Intrinsic.Variable.AddRV("sPath",V.Local.sPath)
+F.Intrinsic.Variable.AddRV("sItem",V.Local.sItem)
+
+Function.Intrinsic.Control.ExitSub
+Function.Intrinsic.Control.Label("Append_Last_Item_Err")
+Function.Intrinsic.Control.If(Variable.Ambient.ErrorNumber,"<>",0)
+	Function.Intrinsic.String.Concat("Error Occurred ",Variable.Ambient.ErrorNumber," with description ",Variable.Ambient.ErrorDescription,V.ambient.NewLine,"Last Action: ",V.ambient.LastAction,Variable.Local.sError)
+	F.Intrinsic.Control.CallSub(Dl,"sText",V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Append_Last_Item.End
+
+Program.Sub.Move_Item.Start
+F.Intrinsic.Debug.SetLA("Move_Item:  Moves a passed FQ filename (in M:\To Be Processed) to a target path (in M:\Processed).  Will increment file name in target path if file name already exists.  Returns both source and target paths as FQ UNC Filenames")
+V.Local.sError.Declare(String)
+
+Function.Intrinsic.Control.SetErrorHandler("Move_Item_Err")
+Function.Intrinsic.Control.ClearErrors
+
+V.Local.sSourcePath.Declare(String)
+V.Local.sTargPath.Declare(String)
+V.Local.bExists.Declare(Boolean)
+V.Local.sExists.Declare(String)
+V.Local.iPos.Declare(Long)
+V.Local.iNo.Declare(Long)
+V.Local.sTemp.Declare(String)
+V.Local.sFile.Declare(String)
+V.Local.bNumeric.Declare(Boolean)
+V.Local.bIncremented.Declare(Boolean)
+V.Local.iRight.Declare(Long)
+
+V.Local.sSourcePath.set(V.Args.sPath)
+F.Intrinsic.String.Replace(V.Local.sSourcePath,"To Be Processed","Processed",V.Local.sTargPath)
+
+F.Intrinsic.Control.CallSub(Check_dirs_exist,"sPath",V.Local.sTargPath)
+
+F.Intrinsic.Debug.SetLA("Makes sure not to overwrite existing files in M:\Processed by auto-incrementing the filename")
+F.Intrinsic.File.Exists(V.Local.sTargPath,V.Local.bExists)
+F.Intrinsic.Control.If(V.Local.bExists,=,True)
+	F.Intrinsic.String.InstrRev(V.Local.sTargPath,".",V.Local.iPos)
+	F.Intrinsic.Math.Sub(V.Local.sTargPath.Length,V.Local.iPos,V.Local.iRight)
+	F.Intrinsic.String.Right(V.Local.sTargPath,V.Local.iRight,V.Local.sTemp)
+	F.Intrinsic.Math.Sub(V.Local.iPos,1,V.Local.iPos)
+	F.Intrinsic.String.Left(V.Local.sTargPath,V.Local.iPos,V.Local.sTargPath)
+	V.Local.iNo.Set(1)
+	F.Intrinsic.Control.DoUntil(V.Local.bExists,=,False)
+		F.Intrinsic.Math.Add(V.Local.iNo,1,V.Local.iNo)
+		F.Intrinsic.String.Concat(V.Local.sTargPath,"(",V.Local.iNo,").",V.Local.sTemp,V.Local.sFile)
+		F.Intrinsic.File.Exists(V.Local.sFile,V.Local.bExists)
+	F.Intrinsic.Control.Loop
+	V.Local.sTargPath.Set(V.Local.sFile)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.File.GetUNCName(V.Local.sSourcePath,V.Local.sSourcePath)
+'F.Intrinsic.String.Replace(V.Local.sSourcePath,"'","''",V.Local.sSourcePath)
+F.Intrinsic.File.CopyFile(V.Local.sSourcePath,V.Local.sTargPath)
+
+F.Intrinsic.File.GetUNCName(V.Local.sTargPath,V.Local.sTargPath)
+F.Intrinsic.String.Replace(V.Local.sTargPath,"'","''",V.Local.sTargPath)
+F.Intrinsic.Variable.AddRV("sSourcePath",V.Local.sSourcePath)
+F.Intrinsic.Variable.AddRV("sTargPath",V.Local.sTargPath)
+
+Function.Intrinsic.Control.ExitSub
+Function.Intrinsic.Control.Label("Move_Item_Err")
+Function.Intrinsic.Control.If(Variable.Ambient.ErrorNumber,"<>",0)
+	Function.Intrinsic.String.Concat("Error Occurred ",Variable.Ambient.ErrorNumber," with description ",Variable.Ambient.ErrorDescription,V.ambient.NewLine,"Last Action: ",V.ambient.LastAction,Variable.Local.sError)
+	F.Intrinsic.Control.CallSub(Dl,"sText",V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+
+
+
+Program.Sub.Move_Item.End
+
+Program.Sub.Check_Dirs_Exist.Start
+F.Intrinsic.Debug.SetLA("Check_Dirs_Exist:  Verifies the target directory in M:\Processed NDE Reportss exists, otherwise creates the directory")
+V.Local.sError.Declare(String)
+
+Function.Intrinsic.Control.SetErrorHandler("Check_Dirs_Exist_Err")
+Function.Intrinsic.Control.ClearErrors
+
+V.Local.sDirs.Declare(String)
+V.Local.sDirs.Redim(-1,-1)
+V.Local.iUB.Declare(Long,-1)
+V.Local.bExists.Declare(Boolean)
+V.Local.sDir.Declare(String)
+V.Local.sOrigPath.Declare(String)
+V.Local.iC.Declare(Long)
+
+V.Local.sOrigPath.Set(V.Args.sPath)
+F.Intrinsic.Debug.SetLA("Separates the target directory into an array in order to loop through")
+'F.Intrinsic.Control.CallSub(Append_last_item,"sPath",V.Args.sPath)
+'F.Intrinsic.Debug.InvokeDebugger
+'F.Intrinsic.Debug.Stop
+'F.Intrinsic.Control.Do
+'	F.Intrinsic.Control.CallSub(Append_last_item,"sPath",V.Args.sPath)
+'	F.Intrinsic.Control.If(V.Args.sItem,<>,"Processed NDE Reports")
+'		V.Local.sDir.Set(V.Args.sPath)
+'		F.Intrinsic.Math.Add(V.Local.iUB,1,V.Local.iUB)
+'		F.Intrinsic.Control.If(V.Local.iUB,=,0)
+'			V.local.sDirs.redim(0,0)
+'		F.Intrinsic.Control.Else
+'			V.Local.sDirs.RedimPreserve(0,V.Local.iUB)
+'		F.Intrinsic.Control.EndIf
+'		V.Local.sDirs(v.Local.iUB).Set(V.Args.sItem)
+'	F.Intrinsic.Control.ElseIf(V.Args.sItem,=,"M")
+'		F.Intrinsic.Control.ExitDo
+'	F.Intrinsic.Control.Else
+'		F.Intrinsic.Control.ExitDo
+'	F.Intrinsic.Control.EndIf
+'F.Intrinsic.Control.Loop
+
+V.Local.sDir.Set("M:\Processed NDE Reports")
+F.Intrinsic.Debug.SetLA("Beginning with M:\Processed NDE Reports, loops through the target directory array one folder at a time to make sure each folder exists and create it if it does not")
+F.Intrinsic.Control.If(V.Local.sDir,=,"M:\Processed NDE Reports")
+	F.Intrinsic.File.DirExists(V.Local.sDir,V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists,<>,True)
+		F.Intrinsic.File.CreateDir(V.Local.sDir)
+	F.Intrinsic.Control.EndIf
+
+'	F.Intrinsic.Control.For(V.Local.iC,V.Local.sDirs.UBound,0,-1)
+'		F.Intrinsic.String.Concat(V.Local.sDir,"\",V.Local.sDirs(v.Local.iC),V.Local.sDir)
+'		F.Intrinsic.File.DirExists(V.Local.sDir,V.Local.bExists)
+'		F.Intrinsic.Control.If(V.Local.bExists,<>,True)
+'			F.Intrinsic.File.CreateDir(V.Local.sDir)
+'		F.Intrinsic.Control.EndIf
+'	F.Intrinsic.Control.Next(V.Local.iC)
+F.Intrinsic.Control.Else
+	F.Intrinsic.String.Concat("ERROR! Issue copying file from To Be Processed folder to Processed folder: Unable to verify target directory exists for ",V.Local.sOrigPath,V.Local.sError)
+	F.Intrinsic.Control.CallSub(Dl,"sText",V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndIf
+
+Function.Intrinsic.Control.ExitSub
+Function.Intrinsic.Control.Label("Check_Dirs_Exist_Err")
+Function.Intrinsic.Control.If(Variable.Ambient.ErrorNumber,"<>",0)
+	Function.Intrinsic.String.Concat("Error Occurred ",Variable.Ambient.ErrorNumber," with description ",Variable.Ambient.ErrorDescription,V.ambient.NewLine,"Last Action: ",V.ambient.LastAction,Variable.Local.sError)
+	F.Intrinsic.Control.CallSub(Dl,"sText",V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+
+
+Program.Sub.Check_Dirs_Exist.End
+
+Program.Sub.Unload.Start
+F.ODBC.Connection!conx.Close
+F.Intrinsic.Control.End
+
+Program.Sub.Unload.End
+
+Program.Sub.DL.Start
+V.Local.bExists.Declare(Boolean)
+
+F.Intrinsic.Control.If(V.Global.sFile,=,"")
+'12/2/10 Revision:
+'___
+	F.Intrinsic.File.DirExists("M:\Logs",V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists,<>,True)
+		F.Intrinsic.File.CreateDir("M:\Logs")
+	F.Intrinsic.Control.EndIf
+
+	F.Intrinsic.File.DirExists("M:\Logs\NDE Reports Logs",V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists,<>,True)
+		F.Intrinsic.File.CreateDir("M:\Logs\NDE Reports Logs")
+	F.Intrinsic.Control.EndIf
+
+	F.Intrinsic.String.Format(V.Ambient.Now,"YYYY-MM-DD_HHNNSS",V.Global.sFile)
+	F.Intrinsic.String.Concat("M:\Logs\NDE Reports Logs\NDE_Reports_",V.Global.sFile,".txt",V.Global.sFile)
+'	F.Intrinsic.String.Concat(V.Caller.TempDir,"\Task_Sched_Attach_Links_Log.txt",V.Global.sFile)
+'___
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Debug.SetLA(V.Args.sText)
+F.Intrinsic.String.Concat(V.Ambient.Date," ",V.Ambient.Time," - ",V.Args.sText,V.Global.sLog)
+F.Intrinsic.File.Exists(V.Global.sFile,V.Local.bExists)
+F.Intrinsic.Control.If(V.Local.bExists,=,True)
+	F.Intrinsic.File.Append2FileNewLine(V.Global.sFile,V.Global.sLog)
+F.Intrinsic.Control.Else
+	F.Intrinsic.File.String2File(V.Global.sFile,V.Global.sLog)
+F.Intrinsic.Control.EndIf
+
+
+Program.Sub.DL.End
+
+
